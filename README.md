@@ -1,1 +1,1 @@
-# clearread-ai
+# PlainRX AI

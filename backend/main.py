@@ -1,5 +1,5 @@
 """
-ClearRead AI API — public-health plain language rewriter powered by Groq (OpenAI-compatible chat).
+PlainRX AI API: public-health plain language rewriter powered by Groq (OpenAI-compatible chat).
 """
 
 from __future__ import annotations
@@ -9,18 +9,19 @@ from typing import Literal
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from documents import download_part, extract_text, safe_stem
 from readability import flesch_kincaid_grade, flesch_reading_ease
 
 load_dotenv()
 
 app = FastAPI(
-    title="ClearRead AI API",
-    description="Groq LLM + Flesch–Kincaid readability",
-    version="0.2.0",
+    title="PlainRX AI API",
+    description="Groq LLM + Flesch-Kincaid readability; optional file upload and exports",
+    version="0.3.0",
 )
 
 _default_origins = (
@@ -40,12 +41,14 @@ app.add_middleware(
 
 GradeLevel = Literal["4", "6", "8", "10"]
 Language = Literal["en", "es"]
+OutputFormat = Literal["txt", "docx", "pdf"]
 
 
 class RewriteRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=50_000)
     grade_level: GradeLevel
     language: Language = "en"
+    output_format: OutputFormat | None = None
 
 
 class ReadabilityScores(BaseModel):
@@ -53,10 +56,17 @@ class ReadabilityScores(BaseModel):
     flesch_reading_ease: float | None
 
 
+class FileDownloadPart(BaseModel):
+    filename: str
+    media_type: str
+    content_base64: str
+
+
 class RewriteResponse(BaseModel):
     rewritten_text: str
     scores_before: ReadabilityScores
     scores_after: ReadabilityScores
+    download: FileDownloadPart | None = None
 
 
 def _scores_for(text: str) -> ReadabilityScores:
@@ -134,8 +144,46 @@ async def rewrite(body: RewriteRequest):
     before = _scores_for(body.text)
     rewritten = await _groq_rewrite(body.text, body.grade_level, body.language)
     after = _scores_for(rewritten)
+    download: FileDownloadPart | None = None
+    if body.output_format:
+        part = download_part(body.output_format, rewritten, "document")
+        download = FileDownloadPart(**part)
     return RewriteResponse(
         rewritten_text=rewritten,
         scores_before=before,
         scores_after=after,
+        download=download,
+    )
+
+
+@app.post("/rewrite-file", response_model=RewriteResponse)
+async def rewrite_file(
+    file: UploadFile = File(...),
+    grade_level: str = Form(...),
+    language: str = Form(...),
+    output_format: str = Form(...),
+):
+    if grade_level not in ("4", "6", "8", "10"):
+        raise HTTPException(status_code=422, detail="grade_level must be 4, 6, 8, or 10")
+    if language not in ("en", "es"):
+        raise HTTPException(status_code=422, detail="language must be en or es")
+    if output_format not in ("txt", "docx", "pdf"):
+        raise HTTPException(status_code=422, detail="output_format must be txt, docx, or pdf")
+
+    raw = await file.read()
+    try:
+        extracted = extract_text(file.filename, raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    before = _scores_for(extracted)
+    rewritten = await _groq_rewrite(extracted, grade_level, language)  # type: ignore[arg-type]
+    after = _scores_for(rewritten)
+    stem = safe_stem(file.filename or "document")
+    part = download_part(output_format, rewritten, stem)  # type: ignore[arg-type]
+    return RewriteResponse(
+        rewritten_text=rewritten,
+        scores_before=before,
+        scores_after=after,
+        download=FileDownloadPart(**part),
     )

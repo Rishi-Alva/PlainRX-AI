@@ -1,8 +1,8 @@
 """
-Flesch–Kincaid metrics without third-party deps (avoids textstat → pkg_resources).
+Flesch-Kincaid metrics without third-party deps (avoids textstat → pkg_resources).
 
 Formulas match the usual U.S. definitions; syllables use a heuristic, so values are
-approximate—fine for before/after comparison on English-like text.
+approximate, and are fine for before/after comparison on English-like text.
 """
 
 from __future__ import annotations

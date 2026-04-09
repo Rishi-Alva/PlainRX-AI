@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-slate-50 text-slate-900 min-h-screen;
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+  body {
+    @apply min-h-screen text-slate-800 antialiased;
+    background-color: #eef2f7;
+    background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(30, 74, 110, 0.09), transparent 55%),
+      radial-gradient(ellipse 60% 40% at 100% 0%, rgba(22, 58, 88, 0.06), transparent 45%),
+      radial-gradient(ellipse 50% 35% at 0% 100%, rgba(30, 74, 110, 0.05), transparent 50%),
+      linear-gradient(180deg, #e8eef5 0%, #f4f6f9 35%, #eef2f7 100%);
+    background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  .dot-grid {
+    background-image: radial-gradient(rgba(30, 74, 110, 0.07) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
 }
